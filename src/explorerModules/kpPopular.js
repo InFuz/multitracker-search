@@ -2,7 +2,7 @@
 // @name __MSG_name__
 // @downloadURL https://raw.githubusercontent.com/Feverqwe/tSearch/master/src/explorerModules/kpPopular.js
 // @connect *://*.kinopoisk.ru/*
-// @version 1.2
+// @version 1.3
 // @cacheTTL 86400
 // @locale ru {"name": "Фильмы"}
 // @locale en {"name": "Movies"}
@@ -49,10 +49,14 @@ const parseItem = item => {
 
   let title = null;
   let year = null;
-  const info = parseTitleTypeYears(normText(linkNode));
+  const linkText = normText(linkNode);
+  const info = parseTitleTypeYears(linkText);
   if (info) {
     title = info.title;
     year = info.year;
+  } else {
+    // у ещё не вышедших фильмов года в скобках нет
+    title = linkText;
   }
 
   let poster = null;

@@ -1,9 +1,9 @@
 // Cloudflare и другие сайты кладут куки (например, cf_clearance) в «разделённое» хранилище
 // (атрибут Partitioned): браузер отправляет их только запросам со страниц самого сайта.
 // Запросы расширения идут со страницы расширения, поэтому такие куки берём через chrome.cookies
-// и передаём служебным заголовком — фоновая страница переносит его в Cookie (см. background).
+// и добавляем в заголовок Cookie сессионным правилом declarativeNetRequest для хоста запроса.
 
-const PARTITIONED_COOKIE_HEADER = 'X-TMS-Partitioned-Cookie';
+const RESOURCE_TYPES = ['xmlhttprequest', 'other'];
 
 const isSameSite = (hostname, topLevelSite) => {
   let siteHost = null;
@@ -15,67 +15,78 @@ const isSameSite = (hostname, topLevelSite) => {
   return hostname === siteHost || hostname.endsWith('.' + siteHost);
 };
 
-const getPartitionedCookieHeader = (url) => {
+const getCookies = (details) => {
   return new Promise((resolve) => {
-    if (!chrome.cookies || !chrome.cookies.getAll) {
-      return resolve('');
-    }
-    const {hostname} = new URL(url);
     try {
-      // partitionKey: {} — вернуть куки из всех разделов
-      chrome.cookies.getAll({url, partitionKey: {}}, (cookies) => {
-        if (chrome.runtime.lastError || !cookies) {
-          return resolve('');
-        }
-        const value = cookies.filter((cookie) => {
-          const key = cookie.partitionKey;
-          return key && key.topLevelSite && !key.hasCrossSiteAncestor && isSameSite(hostname, key.topLevelSite);
-        }).map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-        resolve(value);
+      chrome.cookies.getAll(details, (cookies) => {
+        resolve(chrome.runtime.lastError || !cookies ? [] : cookies);
       });
     } catch (err) {
       // браузер без поддержки partitionKey
-      resolve('');
+      resolve([]);
     }
   });
 };
 
-// Фоновая страница: переносим служебный заголовок в Cookie, только для запросов самого расширения
-const bindPartitionedCookieForwarding = () => {
-  if (!chrome.webRequest || !chrome.webRequest.onBeforeSendHeaders) return;
+const getPartitionedCookieHeader = async (url) => {
+  if (!chrome.cookies || !chrome.cookies.getAll) return '';
 
-  const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '');
-  const headerName = PARTITIONED_COOKIE_HEADER.toLowerCase();
+  const {hostname} = new URL(url);
+  // partitionKey: {} — вернуть куки из всех разделов; без него — только обычные
+  const [allCookies, regularCookies] = await Promise.all([
+    getCookies({url, partitionKey: {}}),
+    getCookies({url}),
+  ]);
+  const regularNames = regularCookies.map(cookie => cookie.name);
 
-  const listener = (details) => {
-    const headers = details.requestHeaders;
-    const index = headers.findIndex(header => header.name.toLowerCase() === headerName);
-    if (index === -1) return;
-
-    const [extra] = headers.splice(index, 1);
-    if (details.initiator !== extensionOrigin || !extra.value) {
-      return {requestHeaders: headers};
-    }
-
-    const cookieHeader = headers.find(header => header.name.toLowerCase() === 'cookie');
-    if (!cookieHeader) {
-      headers.push({name: 'Cookie', value: extra.value});
-    } else {
-      const existingNames = cookieHeader.value.split(';').map(pair => pair.split('=')[0].trim());
-      const missing = extra.value.split('; ').filter(pair => existingNames.indexOf(pair.split('=')[0]) === -1);
-      if (missing.length) {
-        cookieHeader.value = [cookieHeader.value].concat(missing).join('; ');
-      }
-    }
-    return {requestHeaders: headers};
-  };
-
-  try {
-    chrome.webRequest.onBeforeSendHeaders.addListener(listener, {urls: ['<all_urls>']}, ['blocking', 'requestHeaders', 'extraHeaders']);
-  } catch (err) {
-    // extraHeaders не поддерживается (не Chromium)
-    chrome.webRequest.onBeforeSendHeaders.addListener(listener, {urls: ['<all_urls>']}, ['blocking', 'requestHeaders']);
-  }
+  return allCookies.filter((cookie) => {
+    const key = cookie.partitionKey;
+    return key && key.topLevelSite && !key.hasCrossSiteAncestor && isSameSite(hostname, key.topLevelSite) &&
+      regularNames.indexOf(cookie.name) === -1;
+  }).map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
 };
 
-export {PARTITIONED_COOKIE_HEADER, getPartitionedCookieHeader, bindPartitionedCookieForwarding};
+// Стабильный id правила для хоста: одно правило на хост, обновляется перед каждым запросом.
+// Id до RULE_ID_OFFSET заняты служебными правилами (см. stripPreloadHeaders)
+const RULE_ID_OFFSET = 1000;
+const getRuleId = (hostname) => {
+  let hash = 0;
+  for (let i = 0; i < hostname.length; i++) {
+    hash = (hash * 31 + hostname.charCodeAt(i)) | 0;
+  }
+  return RULE_ID_OFFSET + (hash & 0x3fffffff);
+};
+
+const updateSessionRules = (options) => {
+  return new Promise((resolve, reject) => {
+    chrome.declarativeNetRequest.updateSessionRules(options, () => {
+      const err = chrome.runtime.lastError;
+      err ? reject(err) : resolve();
+    });
+  });
+};
+
+const applyPartitionedCookies = async (url) => {
+  if (!chrome.declarativeNetRequest) return;
+
+  const {hostname} = new URL(url);
+  const value = await getPartitionedCookieHeader(url);
+  const id = getRuleId(hostname);
+  const rules = !value ? [] : [{
+    id,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [{header: 'cookie', operation: 'append', value}],
+    },
+    condition: {
+      requestDomains: [hostname],
+      initiatorDomains: [chrome.runtime.id],
+      resourceTypes: RESOURCE_TYPES,
+    },
+  }];
+
+  await updateSessionRules({removeRuleIds: [id], addRules: rules});
+};
+
+export {applyPartitionedCookies};

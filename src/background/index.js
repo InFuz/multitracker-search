@@ -2,7 +2,6 @@ import {autorun} from "mobx";
 import OptionsStore from "../stores/OptionsStore";
 import getLogger from "../tools/getLogger";
 import TrackerStore, {TrackerOptionsStore} from "../stores/TrackerStore";
-import {fetch} from 'whatwg-fetch'
 import getTrackerCodeMeta from "../tools/getTrackerCodeMeta";
 import {destroy} from "mobx-state-tree";
 import {ErrorWithCode} from "../tools/errors";
@@ -13,13 +12,10 @@ import storageGet from "../tools/storageGet";
 import storageSet from "../tools/storageSet";
 import TabFetchBg from "./tabFetchBg";
 import migrate from "../tools/migrate";
-import errorTracker from "../tools/errorTracker";
-import getUserId from "../tools/getUserId";
+import retryOnNetworkError from "../tools/retryOnNetworkError";
+import bindStripPreloadHeaders from "../tools/stripPreloadHeaders";
 import jsonCodeToUserscript from "../tools/jsonCodeToUserscript";
 import setCodeMeta from "../tools/setCodeMeta";
-import {bindPartitionedCookieForwarding} from "../tools/partitionedCookies";
-
-errorTracker.bindExceptions();
 
 const promiseLimit = require('promise-limit');
 const qs = require('querystring');
@@ -31,7 +27,7 @@ const oneLimit = promiseLimit(1);
 
 migrate();
 
-bindPartitionedCookieForwarding();
+bindStripPreloadHeaders();
 
 let tabFetchBg = null;
 
@@ -94,11 +90,6 @@ chrome.runtime.onMessage.addListener(function (message, sender, response) {
       });
       break;
     }
-    case 'track': {
-      const {params} = message;
-      promise = track(params);
-      break;
-    }
     case 'abortSearch': {
       if (tabFetchBg) {
         tabFetchBg.abortRequest(message.id);
@@ -127,14 +118,14 @@ chrome.runtime.onMessage.addListener(function (message, sender, response) {
 
 const updateIcon = (invertIcon) => {
   if (invertIcon) {
-    chrome.browserAction.setIcon({
+    chrome.action.setIcon({
       path: {
         19: 'assets/icons/icon_19_i.png',
         38: 'assets/icons/icon_38_i.png'
       }
     });
   } else {
-    chrome.browserAction.setIcon({
+    chrome.action.setIcon({
       path: {
         19: 'assets/icons/icon_19.png',
         38: 'assets/icons/icon_38.png'
@@ -164,17 +155,17 @@ chrome.contextMenus.onClicked.addListener((info) => {
 
 const setPopupMenu = (disablePopup) => {
   if (disablePopup) {
-    chrome.browserAction.setPopup({
+    chrome.action.setPopup({
       popup: ''
     });
   } else {
-    chrome.browserAction.setPopup({
+    chrome.action.setPopup({
       popup: 'popup.html'
     });
   }
 };
 
-chrome.browserAction.onClicked.addListener(() => {
+chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({
     url: 'index.html'
   });
@@ -189,7 +180,7 @@ const openSearchPage = (query) => {
   }
   chrome.tabs.create({
     url: url,
-    selected: true
+    active: true
   });
 };
 
@@ -263,7 +254,7 @@ const downloadTracker = (id, updateURL, downloadURL) => {
         throw new ErrorWithCode('downloadURL is empty', 'DOWNLOAD_URL_IS_EMPTY');
       }
 
-      return fetch(downloadURL).then(response => {
+      return retryOnNetworkError(() => fetch(downloadURL)).then(response => {
         if (!response.ok) {
           throw new ErrorWithCode('bad response', 'BAD_RESPONSE');
         }
@@ -401,7 +392,7 @@ const getNewCodeByUpdateAndDownloadUrl = async (updateURL, downloadURL, version,
 };
 
 const getCodeAndMetaFromUrl = (url, type = 'tracker') => {
-  return fetch(url).then(response => {
+  return retryOnNetworkError(() => fetch(url)).then(response => {
     if (!response.ok) {
       throw new ErrorWithCode('bad response', 'BAD_RESPONSE');
     }
@@ -419,37 +410,6 @@ const getCodeAndMetaFromUrl = (url, type = 'tracker') => {
       code = setCodeMeta(code, meta);
     }
     return {meta, code};
-  });
-};
-
-const track = params => {
-  return getUserId().then(uuid => {
-    const defaultParams = {
-      v: 1,
-      ul: navigator.language,
-      tid: 'UA-10717861-38',
-      cid: uuid,
-
-      an: 'tms',
-      aid: 'tms-v3',
-      av: BUILD_ENV.version,
-    };
-
-    return Object.assign({}, defaultParams, params);
-  }).then(params => {
-    logger.debug('track', params);
-
-    return fetch('https://www.google-analytics.com/collect', {
-      method: 'POST',
-      headers: {
-        'Content-Type': ' application/x-www-form-urlencoded'
-      },
-      body: qs.stringify(params)
-    }).then(response => {
-      if (!response.ok) {
-        throw new ErrorWithCode(`${response.status}: ${response.statusText}`, response.status);
-      }
-    });
   });
 };
 

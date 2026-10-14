@@ -3,6 +3,7 @@ import {ErrorWithCode} from "./errors";
 import closestElement from "./closestElement";
 import getLogger from "./getLogger";
 import escapeStringRegexp from "escape-string-regexp";
+import retryOnNetworkError from "./retryOnNetworkError";
 
 const logger = getLogger('requestQueryDescription');
 
@@ -46,9 +47,9 @@ const findSrcByImgId = (body, id) => {
 };
 
 const requestQueryDescription = (query) => {
-  return fetch('https://www.google.com/search?' + qs.stringify({
+  return retryOnNetworkError(() => fetch('https://www.google.com/search?' + qs.stringify({
     q: query
-  })).then((response) => {
+  }))).then((response) => {
     return response.text().then((body) => {
       const doc = exKitGetDoc(body, response.url);
 

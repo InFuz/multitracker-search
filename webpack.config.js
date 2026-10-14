@@ -28,6 +28,8 @@ const config = {
     path: path.join(outputPath, 'dist'),
     filename: '[name].js',
     chunkFilename: 'chunk-[name].js',
+    // фон работает в service worker, где нет window
+    globalObject: 'self',
   },
   mode: mode,
   devtool: devtool,
@@ -36,8 +38,8 @@ const config = {
       cacheGroups: {
         commons: {
           name: "commons",
-          chunks: chunk => ['bg', 'popup', 'index'].indexOf(chunk.name) !== -1,
-          minChunks: 3,
+          chunks: chunk => ['popup', 'index'].indexOf(chunk.name) !== -1,
+          minChunks: 2,
           priority: 0
         },
         'commons_ui': {
@@ -163,16 +165,6 @@ if (mode === 'production') {
       canPrint: true
     }),
   );
-  Object.keys(config.entry).forEach(entryName => {
-    let value = config.entry[entryName];
-    if (!Array.isArray(value)) {
-      value = [value];
-    }
-    // value.unshift('babel-polyfill');
-    value.unshift('whatwg-fetch');
-
-    config.entry[entryName] = value;
-  });
 }
 
 module.exports = config;

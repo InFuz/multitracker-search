@@ -77,14 +77,18 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
           }
         } else {
           // 403/503 обычно означают проверку Cloudflare/DDoS-Guard: даём ссылку на сайт,
-          // после её прохождения в браузере запросы расширения тоже проходят
-          const trackerURL = self.tracker && self.tracker.meta && self.tracker.meta.trackerURL;
-          if (trackerURL && isBlockedByProtection(err) && isAlive(self)) {
+          // после её прохождения в браузере запросы расширения тоже проходят.
+          // Поиск мог быть уже заменён новым — тогда стор удалён из дерева и трогать его нельзя
+          const tracker = isAlive(self) && self.tracker;
+          const trackerURL = tracker && tracker.meta && tracker.meta.trackerURL;
+          if (trackerURL && isBlockedByProtection(err)) {
             self.authRequired = {
               url: trackerURL
             };
+            logger.info(`[${id}] searchWrapper: требуется вход или проверка на сайте`, err.message);
+          } else {
+            logger.error(`[${id}] searchWrapper error`, err);
           }
-          logger.error(`[${id}] searchWrapper error`, err);
         }
       }
     }),

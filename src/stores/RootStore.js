@@ -16,8 +16,6 @@ import getNow from "../tools/getNow";
 import storageSet from "../tools/storageSet";
 import {ErrorWithCode} from "../tools/errors";
 import getLogger from "../tools/getLogger";
-import tracker from "../tools/tracker";
-import AnalyticsStore from "./AnalyticsStore";
 
 const deserializeError = require('deserialize-error');
 
@@ -39,7 +37,6 @@ let searchId = 0;
  * @property {EditorStore|undefined|null} editor
  * @property {CodeMakerStore|undefined|null} codeMaker
  * @property {PageStore} [page]
- * @property {AnalyticsStore} [analytics]
  * @property {function} createSearch
  * @property {function} destroySearch
  * @property {function} createProfileEditor
@@ -65,7 +62,6 @@ const RootStore = types.model('RootStore', {
   editor: types.maybeNull(EditorStore),
   codeMaker: types.maybeNull(CodeMakerStore),
   page: types.optional(PageStore, {}),
-  analytics: types.optional(AnalyticsStore, {}),
 }).actions(/**RootStore*/self => {
   return {
     createSearch(query) {
@@ -126,7 +122,6 @@ const RootStore = types.model('RootStore', {
     },
     afterCreate() {
       self.page.init();
-      tracker.init();
     },
   };
 }).views((self) => {

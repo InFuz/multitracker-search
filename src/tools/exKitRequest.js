@@ -3,7 +3,8 @@ import {fetch, Headers} from 'whatwg-fetch';
 import 'abortcontroller-polyfill/dist/abortcontroller-polyfill-only';
 import getLogger from "./getLogger";
 import base64ToArrayBuffer from "./base64ToArrayBuffer";
-import {PARTITIONED_COOKIE_HEADER, getPartitionedCookieHeader} from "./partitionedCookies";
+import {applyPartitionedCookies} from "./partitionedCookies";
+import retryOnNetworkError from "./retryOnNetworkError";
 
 const deserializeError = require('deserialize-error');
 const contentType = require('content-type');
@@ -137,35 +138,17 @@ const tabFetchRequest = (origin, url, fetchOptions) => {
   return request;
 };
 
-// На некоторых сетях первое соединение с хостом обрывается, а повтор проходит
-const NETWORK_RETRY_COUNT = 3;
-const NETWORK_RETRY_DELAY = 700;
-
 const fetchRequest = (url, fetchOptions) => {
   const controller = new AbortController();
 
-  const fetchWithRetry = (retryCount, headers) => {
-    return fetch(url, {
-      method: fetchOptions.method,
-      headers: headers,
-      body: fetchOptions.body,
-      signal: controller.signal
-    }).catch((err) => {
-      // whatwg-fetch отдаёт TypeError на сетевую ошибку, отмена — AbortError
-      if (retryCount > 0 && !controller.signal.aborted && err instanceof TypeError) {
-        return new Promise(resolve => setTimeout(resolve, NETWORK_RETRY_DELAY)).then(() => fetchWithRetry(retryCount - 1, headers));
-      }
-      throw err;
-    });
-  };
-
-  const request = getPartitionedCookieHeader(url).then((partitionedCookie) => {
-    const headers = new Headers(fetchOptions.headers || undefined);
-    if (partitionedCookie) {
-      headers.set(PARTITIONED_COOKIE_HEADER, partitionedCookie);
-    }
-    return fetchWithRetry(NETWORK_RETRY_COUNT, headers);
-  }).then(response => {
+  const request = applyPartitionedCookies(url).catch((err) => {
+    logger.warn('applyPartitionedCookies error', err);
+  }).then(() => retryOnNetworkError(() => fetch(url, {
+    method: fetchOptions.method,
+    headers: fetchOptions.headers,
+    body: fetchOptions.body,
+    signal: controller.signal
+  }), controller.signal)).then(response => {
     if (!response.ok) {
       throw new StatusCodeError(response.status, null, null, response);
     }

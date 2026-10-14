@@ -15,6 +15,7 @@ class TabFetchBg {
     this.originTabMap = new Map();
     this.idRequestMap = new Map();
     this.requestIndex = 0;
+    this.keepAliveTimer = null;
 
     this.isMobile = /Mobile Safari\/(\d+)|Android (\d+)/.test(navigator.userAgent);
 
@@ -23,15 +24,6 @@ class TabFetchBg {
 
   async request(senderTabId, originUrl, fetchUrl, fetchOptions) {
     DEBUG && logger.debug('request', senderTabId, originUrl, fetchUrl, fetchOptions);
-
-    const permissions = {
-      permissions: ['tabs'],
-    };
-
-    const hasPermissions = await containsPermissions(permissions);
-    if (!hasPermissions) {
-      await requestPermissions(permissions);
-    }
 
     if (!this.senderTabMap.has(senderTabId)) {
       this.senderTabMap.set(senderTabId, new SenderTab(this, senderTabId));
@@ -53,8 +45,23 @@ class TabFetchBg {
     senderTab.addRequest(request);
 
     this.addRemovedTabListener();
+    this.keepAlive();
 
     return request.id;
+  }
+
+  // Service worker засыпает через ~30 с без событий, а состояние запросов хранится в памяти.
+  // Пока есть активные запросы или открытые вкладки-источники, продлеваем ему жизнь вызовом API.
+  keepAlive() {
+    if (this.keepAliveTimer) return;
+    this.keepAliveTimer = setInterval(() => {
+      if (!this.originTabMap.size && !this.idRequestMap.size) {
+        clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = null;
+        return;
+      }
+      chrome.runtime.getPlatformInfo(() => {});
+    }, 20 * 1000);
   }
 
   deleteOriginTab(originUrl) {
@@ -292,9 +299,10 @@ class Request extends Events {
     return this.originTab.initTab().then(() => {
       if (sessionId !== this.sessionIndex) return;
 
-      return executeScriptPromise(this.originTab.tabId, {
-        file: 'tabFetch.js',
-        runAt: 'document_start',
+      return executeScriptPromise({
+        target: {tabId: this.originTab.tabId},
+        files: ['tabFetch.js'],
+        injectImmediately: true,
       });
     }).then(() => {
       if (sessionId !== this.sessionIndex) return;
@@ -303,17 +311,19 @@ class Request extends Events {
       const {origin: urlOrigin} = new URL(this.url);
       const isSameOrigin = urlOrigin === originTabOrigin;
 
-      return executeScriptPromise(this.originTab.tabId, {
-        code: `(${function (id, url, options, isSameOrigin) {
+      return executeScriptPromise({
+        target: {tabId: this.originTab.tabId},
+        func: (id, url, options, isSameOrigin) => {
           try {
             window.tabFetch(id, url, options, isSameOrigin);
             return {result: true};
           } catch (err) {
             return {error: {message: err.message, stack: err.stack}};
           }
-        }})(${strArgs(this.id, this.url, this.options, isSameOrigin)})`,
-        runAt: 'document_start',
-      }).then(results => results[0]);
+        },
+        args: [this.id, this.url, this.options, isSameOrigin],
+        injectImmediately: true,
+      }).then(results => results[0] && results[0].result);
     }).then((result) => {
       if (sessionId !== this.sessionIndex) return;
 
@@ -342,15 +352,19 @@ class Request extends Events {
   abort(reason) {
     DEBUG && logger.debug('Request abort', this.id);
     if (this.state === 'pending') {
-      executeScriptPromise(this.originTab.tabId, {
-        code: `(${function (id) {
+      executeScriptPromise({
+        target: {tabId: this.originTab.tabId},
+        func: (id) => {
           try {
             window.tabFetchAbort(id);
           } catch (err) {
-            logger.error('tabFetchAbort error', err);
+            console.error('tabFetchAbort error', err);
           }
-        }})(${strArgs(this.id)})`,
-        runAt: 'document_start',
+        },
+        args: [this.id],
+        injectImmediately: true,
+      }).catch((err) => {
+        logger.error('tabFetchAbort error', err);
       });
     }
     this.handleReject(reason || new Error('Aborted'));
@@ -362,17 +376,30 @@ class Request extends Events {
   }
 }
 
+const POPUP_WIDTH = 120;
+const POPUP_HEIGHT = 25;
+
+// В service worker нет screen: прячем окно в правый нижний угол текущего окна браузера
 const createPopup = (originUrl) => {
-  return new Promise(resolve => chrome.windows.create({
-    url: originUrl,
-    focused: false,
-    width: 120,
-    height: 25,
-    left: screen.availWidth,
-    top: screen.availHeight,
-    type: 'popup',
-  }, resolve)).then((window) => {
-    const tabId = window.tabs[0].id;
+  return new Promise((resolve) => {
+    chrome.windows.getLastFocused((lastWindow) => {
+      resolve(chrome.runtime.lastError ? null : lastWindow);
+    });
+  }).then((lastWindow) => {
+    const position = {};
+    if (lastWindow) {
+      position.left = lastWindow.left + lastWindow.width - POPUP_WIDTH;
+      position.top = lastWindow.top + lastWindow.height - POPUP_HEIGHT;
+    }
+    return new Promise(resolve => chrome.windows.create(Object.assign({
+      url: originUrl,
+      focused: false,
+      width: POPUP_WIDTH,
+      height: POPUP_HEIGHT,
+      type: 'popup',
+    }, position), resolve));
+  }).then((popupWindow) => {
+    const tabId = popupWindow.tabs[0].id;
     chrome.tabs.update(tabId, {muted: true});
     return tabId;
   });
@@ -389,39 +416,13 @@ const createTab = (originUrl) => {
   });
 };
 
-const executeScriptPromise = (tabId, options) => {
+const executeScriptPromise = (injection) => {
   return new Promise((resolve, reject) => {
-    chrome.tabs.executeScript(tabId, options, (results) => {
+    chrome.scripting.executeScript(injection, (results) => {
       const err = chrome.runtime.lastError;
       err ? reject(err) : resolve(results);
     });
   });
-};
-
-const containsPermissions = (permissions) => {
-  return new Promise((resolve, reject) => {
-    chrome.permissions.contains(permissions, (result) => {
-      const err = chrome.runtime.lastError;
-      err ? reject(err) : resolve(result);
-    });
-  });
-};
-
-const requestPermissions = (permissions) => {
-  return new Promise((resolve, reject) => {
-    chrome.permissions.request(permissions, (result) => {
-      const err = chrome.runtime.lastError;
-      err ? reject(err) : resolve(result);
-    });
-  }).then((granted) => {
-    if (!granted) {
-      throw new Error('Permissions is not granted');
-    }
-  });
-};
-
-const strArgs = (...args) => {
-  return args.map(JSON.stringify).join(',');
 };
 
 export default TabFetchBg;

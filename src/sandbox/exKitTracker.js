@@ -94,7 +94,8 @@ class ExKitTracker {
       try {
         nextPageUrl = this.matchSelector(session, doc, 'nextPageUrl', this.code.selectors.nextPageUrl);
       } catch (err) {
-        console.error('nextPageUrl matchSelector error', err);
+        // на последней странице ссылки на следующую нет — это не ошибка
+        console.debug('nextPageUrl is not found', err.message);
       }
     }
 
@@ -206,7 +207,12 @@ class ExKitTracker {
       this.code.hooks.onBeforeRequest(session, options);
     }
 
-    return API_request(options).then(response => {
+    let request = API_request(options);
+    if (this.code.hooks.onRequestError) {
+      request = request.catch(err => this.code.hooks.onRequestError(session, err, options));
+    }
+
+    return request.then(response => {
       session.response = response;
 
       if (this.code.hooks.onAfterRequest) {
