@@ -20,8 +20,10 @@ const compareVersions = require('compare-versions');
 const getTrackerCodeMeta = require('../src/tools/getTrackerCodeMeta').default;
 const getExploreModuleCodeMeta = require('../src/tools/getExploreModuleCodeMeta').default;
 const removedTrackerIds = require('../src/tools/removedTrackerIds').default;
+const exKitBuildConnectRe = require('../src/tools/exKitBuildConnectRe').default;
 const {getBuiltInModuleUrl} = require('../src/tools/builtInModules');
 const getArgvValue = require('./getArgvValue');
+const getTrackerSearchUrls = require('./getTrackerSearchUrls');
 
 const rootPath = path.join(__dirname, '..');
 
@@ -101,6 +103,25 @@ moduleTypes.forEach(({type, getMeta, removedIds}) => {
     const downloadURL = getBuiltInModuleUrl(type, id);
     if (meta.downloadURL !== downloadURL) {
       errors.push(`${file}: @downloadURL должен быть ${downloadURL}`);
+    }
+
+    // адрес поиска и зеркала (search.mirrors) должны быть разрешены в @connect, иначе запрос к ним расширение не пропустит
+    if (type === 'trackers') {
+      const {searchUrl, mirrors} = getTrackerSearchUrls(code);
+      const urls = (searchUrl ? [searchUrl] : []).concat(mirrors);
+      const connectRe = exKitBuildConnectRe(meta.connect);
+      urls.forEach((url) => {
+        let origin = null;
+        try {
+          origin = new URL(url).origin;
+        } catch (err) {
+          errors.push(`${file}: некорректный адрес ${url}`);
+          return;
+        }
+        if (!connectRe || !connectRe.test(origin)) {
+          errors.push(`${file}: ${origin} не разрешён в @connect`);
+        }
+      });
     }
 
     if (/^\s*"description"\s*:\s*\{/m.test(code)) {

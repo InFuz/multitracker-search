@@ -197,7 +197,16 @@ const trackerRequest = async (tracker, options) => {
   if (!tracker.connectRe || !tracker.connectRe.test(origin)) {
     throw new ErrorWithCode(`Connection is not allowed! ${origin} Add url patter in @connect!`, 'ORIGIN_IS_NOT_AVAILABLE');
   }
-  const response = await loadResponse(tracker.id, options);
+  let response;
+  try {
+    response = await loadResponse(tracker.id, options);
+  } catch (err) {
+    if (err.code === 'NO_SAVED_PAGE') throw err;
+    // как fetch в браузере: сетевая ошибка — TypeError (по нему exKit переключается на зеркало)
+    const networkError = new TypeError(`Failed to fetch: ${err.code || ''} ${err.message}`.trim());
+    networkError.cause = err;
+    throw networkError;
+  }
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new StatusCodeError(response.statusCode, null, null, response);
   }
@@ -278,6 +287,9 @@ const describeError = (err) => {
     if ([403, 503].includes(err.statusCode)) return {kind: 'skip', text: `ответ ${err.statusCode}: вход или защита от ботов (Cloudflare)`};
     return {kind: 'fail', text: `ответ ${err.statusCode}`};
   }
+  if (err instanceof TypeError && /^Failed to fetch/.test(err.message)) {
+    return {kind: 'skip', text: `сеть: ${err.message}`};
+  }
   if (/DoH|ENOTFOUND|ECONN|ETIMEDOUT|EHOSTUNREACH|socket|TLS|certificate/i.test(`${err.code} ${err.message}`)) {
     return {kind: 'skip', text: `сеть: ${err.code || ''} ${err.message}`.trim()};
   }
@@ -301,7 +313,7 @@ const checkTracker = async (id) => {
 const checkTrackerInner = async (id, lines, warnings) => {
   let kind = 'ok';
   const setKind = (value) => {
-    const order = ['ok', 'skip', 'fail'];
+    const order = ['ok', 'skip', 'warn', 'fail'];
     if (order.indexOf(value) > order.indexOf(kind)) kind = value;
   };
 
@@ -322,6 +334,11 @@ const checkTrackerInner = async (id, lines, warnings) => {
     const stats = result.stats;
     const rowsInfo = stats ? `, строк ${stats.rows}${stats.failedRows ? `, не разобрано ${stats.failedRows} (${stats.firstRowError})` : ''}` : '';
     lines.push(`«${query}»: результатов ${results.length}${rowsInfo}${result.nextPageRequest ? ', есть следующая страница' : ''}`);
+    const searchUrl = tracker.exKitCode && tracker.exKitCode.search && tracker.exKitCode.search.url;
+    if (stats && stats.url && searchUrl && new URL(stats.url).origin !== new URL(searchUrl).origin) {
+      setKind('warn');
+      lines.push(`основной адрес не ответил, ответило зеркало ${new URL(stats.url).origin}`);
+    }
 
     if (!results.length) {
       setKind('fail');
@@ -371,7 +388,7 @@ const main = async () => {
     .filter(name => /\.js$/.test(name)).map(name => path.basename(name, '.js'))
     .filter(id => !trackerFilter.length || trackerFilter.includes(id));
 
-  const marks = {ok: '✓', skip: '–', fail: '✗'};
+  const marks = {ok: '✓', skip: '–', warn: '!', fail: '✗'};
   // API_* — общие глобальные функции, как window в песочнице, поэтому трекеры проверяются по очереди
   const reports = [];
   for (const id of ids) {
@@ -382,7 +399,7 @@ const main = async () => {
   }
 
   const count = kind => reports.filter(report => report.kind === kind).length;
-  console.log(`\nВ порядке: ${count('ok')}, не проверены (вход, защита, сеть): ${count('skip')}, сломаны: ${count('fail')}`);
+  console.log(`\nВ порядке: ${count('ok')}, работают через зеркало: ${count('warn')}, не проверены (вход, защита, сеть): ${count('skip')}, сломаны: ${count('fail')}`);
   process.exit(count('fail') ? 1 : 0);
 };
 

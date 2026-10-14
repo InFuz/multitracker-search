@@ -8,6 +8,7 @@
 - Удалённый код и аналитику не добавляй: CSP страниц расширения — только `'self'`.
 - Сборка: Node 18 (`nvm use`), `npm run release` (webpack 4). Скрипт сам пересоздаёт `src/trackers.json` и `src/explorers.json` и собирает `dist/dist`. После сборки расширение перезагружается в `vivaldi://extensions`.
 - `gh` залогинен как InFuz, пушить в форк можно.
+- GitHub (в том числе raw.githubusercontent.com) из Node напрямую не открывается: `curl` и `git` ходят через прокси из `HTTPS_PROXY`, `https`/`fetch` в Node его не учитывают. Трекеры при этом доступны напрямую.
 
 ## Трекеры и подборки
 
@@ -16,6 +17,7 @@
 - `@downloadURL` встроенных модулей указывает на master форка (`src/tools/builtInModules.js`): после пуша в master расширение само подтягивает модуль с более высокой версией в течение суток.
 - Удалённые трекеры перечислены в `src/tools/removedTrackerIds.js`: они вычищаются из кэша и профилей.
 - У каждого exKit-трекера задавай `selectors.noResults` — элемент страницы «ничего не найдено»: без него пустую выдачу не отличить от сменившейся вёрстки (значок «!», ошибка `LAYOUT_CHANGED`). Разметку пустой выдачи смотри через `npm run checkTrackers -- --save --tracker <id>` в `.cache/trackerPages`.
+- Официальные зеркала сайта — в `search.mirrors` (домены также в `@connect`, иначе `checkModules` не пропустит); exKit переключается на них при сетевой ошибке и 502/504/52x. Сторонние прокси-зеркала (ninjaproxy, unblock и т.п.) не добавляй. Переезд доменов отслеживает `npm run checkJackett`.
 - Нестандартные ответы сайта (например, 404 на пустую выдачу у MegaPeer) обрабатывай хуком `code.hooks.onRequestError` в самом трекере, а не в общем коде.
 - Актуальные селекторы удобно сверять с определениями Jackett (`src/Jackett.Common/Definitions`).
 

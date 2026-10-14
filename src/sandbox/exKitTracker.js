@@ -10,9 +10,25 @@ const intFields = ['categoryId', 'size', 'seeds', 'peers', 'date'];
 const urlFields = ['categoryUrl', 'url', 'downloadUrl', 'nextPageUrl'];
 const selectors = ['categoryTitle', 'categoryUrl', 'categoryId', 'title', 'url', 'size', 'downloadUrl', 'seeds', 'peers', 'date'];
 
+// Ошибки, при которых запрос повторяется на зеркале: сайт недоступен (DNS, соединение) или его сервер не отвечает.
+// 403/503 сюда не входят — это вход или проверка Cloudflare, на зеркале будет то же самое
+const mirrorStatusCodes = [502, 504, 520, 521, 522, 523, 524, 525, 526, 530];
+const isMirrorError = err => {
+  if (!err || err.name === 'AbortError' || err.code === 'EABORT') {
+    return false;
+  }
+  if (err.statusCode) {
+    return mirrorStatusCodes.indexOf(err.statusCode) !== -1;
+  }
+  // fetch отдаёт TypeError на сетевую ошибку
+  return err.name === 'TypeError';
+};
+
 class ExKitTracker {
   constructor() {
     this.code = null;
+    // зеркало, которое ответило последним: следующие запросы идут сначала на него
+    this.activeOrigin = null;
   }
 
   init(code) {
@@ -80,7 +96,7 @@ class ExKitTracker {
     }
 
     // stats — для диагностики выдачи (builder/checkTrackers.js)
-    const stats = {rows: rows.length, failedRows: 0, firstRowError: null, fieldErrors: {}};
+    const stats = {url: response.url, rows: rows.length, failedRows: 0, firstRowError: null, fieldErrors: {}};
     const results = [];
     for (let i = 0, row; row = rows[i]; i++) {
       try {
@@ -237,7 +253,7 @@ class ExKitTracker {
       this.code.hooks.onBeforeRequest(session, options);
     }
 
-    let request = API_request(options);
+    let request = this.requestWithMirrors(options);
     if (this.code.hooks.onRequestError) {
       request = request.catch(err => this.code.hooks.onRequestError(session, err, options));
     }
@@ -251,6 +267,47 @@ class ExKitTracker {
 
       return response;
     });
+  }
+
+  // search.mirrors — запасные адреса сайта (origin), их домены должны быть в @connect.
+  // Запросы к основному адресу при недоступности сайта повторяются на зеркалах по очереди
+  getOrigins(url) {
+    const mirrors = this.code.search.mirrors;
+    if (!Array.isArray(mirrors) || !mirrors.length) {
+      return null;
+    }
+    const origins = [new URL(this.code.search.url).origin].concat(mirrors.map(mirror => new URL(mirror).origin));
+    if (origins.indexOf(new URL(url).origin) === -1) {
+      return null;
+    }
+    if (this.activeOrigin) {
+      origins.splice(origins.indexOf(this.activeOrigin), 1);
+      origins.unshift(this.activeOrigin);
+    }
+    return origins;
+  }
+
+  requestWithMirrors(options) {
+    const origins = this.getOrigins(options.url);
+    if (!origins) {
+      return API_request(options);
+    }
+
+    const {pathname, search, hash} = new URL(options.url);
+    const tryOrigin = index => {
+      const url = origins[index] + pathname + search + hash;
+      return API_request(Object.assign({}, options, {url})).then(response => {
+        this.activeOrigin = origins[index];
+        return response;
+      }, err => {
+        if (index + 1 < origins.length && isMirrorError(err)) {
+          console.debug(`${origins[index]} is not available, try ${origins[index + 1]}`, err.message);
+          return tryOrigin(index + 1);
+        }
+        throw err;
+      });
+    };
+    return tryOrigin(0);
   }
 
   prepareCode(code) {
