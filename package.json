@@ -1,6 +1,6 @@
 {
   "name": "multitracker-search",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "scripts": {
     "buildExplorersJson": "node ./builder/buildExplorersJson.js",
     "buildTrackersJson": "node ./builder/buildTrackersJson.js",

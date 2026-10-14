@@ -16,13 +16,13 @@
     },
     "options_page": "index.html#/options",
     "optional_permissions": ["tabs"],
-    "permissions": ["storage", "contextMenus", "unlimitedStorage", "http://*/*", "https://*/*"],
+    "permissions": ["storage", "contextMenus", "unlimitedStorage", "cookies", "webRequest", "webRequestBlocking", "http://*/*", "https://*/*"],
     "omnibox": {
         "keyword" : "tms"
     },
     "background": {
         "scripts": ["chunk-commons.js", "bg.js"],
-        "persistent": false
+        "persistent": true
     },
     "sandbox": {
         "pages": [
@@ -33,6 +33,6 @@
     "name": "__MSG_extName__",
     "description": "__MSG_extDesc__",
     "default_locale": "en",
-    "version": "3.2.0",
+    "version": "3.2.1",
     "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCi13XoirKoojDbhd8vAZQ4f449wK3OJZEaZ2tdKq1dkz3fUqkj+KEf5dz4qFo6BHkyQGlaxZXw0hC2ttG1U97pCtrh8mAp4+KNyNjyBrW2wI7XXkWrmOiXS6X7bH5TKmisokjkECig7q180YRmXGjhH3ik9vCueevBKHgJtIwGswIDAQAB"
 }

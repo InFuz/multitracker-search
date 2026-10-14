@@ -1,8 +1,9 @@
 import {ErrorWithCode, StatusCodeError} from './errors';
-import {fetch} from 'whatwg-fetch';
+import {fetch, Headers} from 'whatwg-fetch';
 import 'abortcontroller-polyfill/dist/abortcontroller-polyfill-only';
 import getLogger from "./getLogger";
 import base64ToArrayBuffer from "./base64ToArrayBuffer";
+import {PARTITIONED_COOKIE_HEADER, getPartitionedCookieHeader} from "./partitionedCookies";
 
 const deserializeError = require('deserialize-error');
 const contentType = require('content-type');
@@ -143,22 +144,28 @@ const NETWORK_RETRY_DELAY = 700;
 const fetchRequest = (url, fetchOptions) => {
   const controller = new AbortController();
 
-  const fetchWithRetry = (retryCount) => {
+  const fetchWithRetry = (retryCount, headers) => {
     return fetch(url, {
       method: fetchOptions.method,
-      headers: fetchOptions.headers,
+      headers: headers,
       body: fetchOptions.body,
       signal: controller.signal
     }).catch((err) => {
       // whatwg-fetch отдаёт TypeError на сетевую ошибку, отмена — AbortError
       if (retryCount > 0 && !controller.signal.aborted && err instanceof TypeError) {
-        return new Promise(resolve => setTimeout(resolve, NETWORK_RETRY_DELAY)).then(() => fetchWithRetry(retryCount - 1));
+        return new Promise(resolve => setTimeout(resolve, NETWORK_RETRY_DELAY)).then(() => fetchWithRetry(retryCount - 1, headers));
       }
       throw err;
     });
   };
 
-  const request = fetchWithRetry(NETWORK_RETRY_COUNT).then(response => {
+  const request = getPartitionedCookieHeader(url).then((partitionedCookie) => {
+    const headers = new Headers(fetchOptions.headers || undefined);
+    if (partitionedCookie) {
+      headers.set(PARTITIONED_COOKIE_HEADER, partitionedCookie);
+    }
+    return fetchWithRetry(NETWORK_RETRY_COUNT, headers);
+  }).then(response => {
     if (!response.ok) {
       throw new StatusCodeError(response.status, null, null, response);
     }

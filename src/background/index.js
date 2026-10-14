@@ -17,6 +17,7 @@ import errorTracker from "../tools/errorTracker";
 import getUserId from "../tools/getUserId";
 import jsonCodeToUserscript from "../tools/jsonCodeToUserscript";
 import setCodeMeta from "../tools/setCodeMeta";
+import {bindPartitionedCookieForwarding} from "../tools/partitionedCookies";
 
 errorTracker.bindExceptions();
 
@@ -29,6 +30,8 @@ const logger = getLogger('background');
 const oneLimit = promiseLimit(1);
 
 migrate();
+
+bindPartitionedCookieForwarding();
 
 let tabFetchBg = null;
 
