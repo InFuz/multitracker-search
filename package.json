@@ -1,11 +1,12 @@
 {
   "name": "multitracker-search",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "scripts": {
     "buildExplorersJson": "node ./builder/buildExplorersJson.js",
     "buildTrackersJson": "node ./builder/buildTrackersJson.js",
     "prepare": "git config core.hooksPath .githooks || true",
     "checkModules": "node ./builder/checkModules.js",
+    "checkTrackers": "node ./builder/checkTrackers.js",
     "compress": "node ./builder/compressDist",
     "watch": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode development --watch --config webpack.config.js",
     "build": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode development --config webpack.config.js",
@@ -75,6 +76,7 @@
     "cssnano": "^4.1.10",
     "fs-extra": "^8.0.1",
     "html-webpack-plugin": "^3.2.0",
+    "jsdom": "^22.1.0",
     "less": "^3.9.0",
     "less-loader": "^5.0.0",
     "mini-css-extract-plugin": "^0.7.0",

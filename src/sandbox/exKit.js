@@ -81,6 +81,7 @@ const API_exKit = code => {
           success: true,
           results: result.results,
           nextPageRequest: nextPageRequest,
+          stats: result.stats,
         };
       };
 

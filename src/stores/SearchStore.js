@@ -18,6 +18,7 @@ const logger = getLogger('SearchStore');
  * @property {string} [state]
  * @property {*} nextQuery
  * @property {{url:string|undefined|null}|undefined} authRequired
+ * @property {{url:string|undefined|null}|undefined} layoutChanged
  * @property {function:Promise} searchWrapper
  * @property {function} search
  * @property {function} searchNext
@@ -31,6 +32,10 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
   state: types.optional(types.enumeration(['idle', 'pending', 'done', 'error']), 'idle'),
   nextQuery: types.frozen(),
   authRequired: types.maybe(types.model({
+    url: types.maybeNull(types.string)
+  })),
+  // выдача не разобрана: похоже, у сайта изменилась вёрстка; url — страница, которую вернул сайт
+  layoutChanged: types.maybe(types.model({
     url: types.maybeNull(types.string)
   })),
 }).actions((self) => {
@@ -75,6 +80,14 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
               url: err.url
             };
           }
+        } else
+        if (err.code === 'LAYOUT_CHANGED') {
+          if (isAlive(self)) {
+            self.layoutChanged = {
+              url: err.url
+            };
+          }
+          logger.warn(`[${id}] searchWrapper: выдача не разобрана, возможно, сайт изменился`, err.message);
         } else {
           // 403/503 обычно означают проверку Cloudflare/DDoS-Guard: даём ссылку на сайт,
           // после её прохождения в браузере запросы расширения тоже проходят.

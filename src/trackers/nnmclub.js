@@ -6,7 +6,7 @@
 // @connect *://nnmclub.to/*
 // @require exKit
 // @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/trackers/nnmclub.js
-// @version 1.1.1
+// @version 1.1.2
 // ==/UserScript==
 
 const code = {
@@ -19,6 +19,7 @@ const code = {
   },
   "selectors": {
     "row": {"selector": "table.forumline.tablesorter>tbody>tr"},
+    "noResults": {"selector": "table.tablesorter span.gen:contains(\"Не найдено\")"},
     "categoryTitle": {
       "selector": "td:eq(1)>a",
       "pipeline": [{"name": "getText"}, {"name": "trim"}]

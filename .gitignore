@@ -3,3 +3,4 @@
 /dist/
 /old/
 .DS_Store
+/.cache/

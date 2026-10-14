@@ -110,7 +110,7 @@ class Tracker extends React.Component {
       if (trackerSearchStore.state === 'pending') {
         iconClassList.push('tracker__icon-loading');
       } else
-      if (!trackerSearchStore.authRequired && trackerSearchStore.state === 'error') {
+      if (!trackerSearchStore.authRequired && !trackerSearchStore.layoutChanged && trackerSearchStore.state === 'error') {
         iconClassList.push('tracker__icon-error');
       }
     }
@@ -133,6 +133,12 @@ class Tracker extends React.Component {
         searchState = (
           <a className="tracker__login" target="_blank" href={trackerSearchStore.authRequired.url}
              title={chrome.i18n.getMessage('login')}/>
+        );
+      } else
+      if (trackerSearchStore.layoutChanged) {
+        searchState = (
+          <a className="tracker__layout-changed" target="_blank" href={trackerSearchStore.layoutChanged.url}
+             title={chrome.i18n.getMessage('layoutChanged')}/>
         );
       } else {
         const count = this.searchStore.getResultCountByTrackerId(tracker.id);

@@ -263,6 +263,9 @@
     "login": {
         "message": "Login"
     },
+    "layoutChanged": {
+        "message": "Could not parse the results: the tracker site seems to have changed. Open the page returned by the site"
+    },
     "categoryFilms": {
         "message": "Films"
     },

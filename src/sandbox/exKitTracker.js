@@ -79,13 +79,40 @@ class ExKitTracker {
       rows.splice(this.code.selectors.skipFromEnd * -1);
     }
 
+    // stats — для диагностики выдачи (builder/checkTrackers.js)
+    const stats = {rows: rows.length, failedRows: 0, firstRowError: null, fieldErrors: {}};
     const results = [];
     for (let i = 0, row; row = rows[i]; i++) {
       try {
-        const result = this.parseRow(session, row);
+        const result = this.parseRow(session, row, stats);
         results.push(result);
       } catch (err) {
-        console.error('parseRow error', err);
+        stats.failedRows++;
+        if (!stats.firstRowError) {
+          stats.firstRowError = err.message;
+        }
+      }
+    }
+
+    if (!results.length) {
+      // noResults — элемент, который есть на странице поиска и при пустой выдаче («ничего не найдено», пустая таблица)
+      const noResults = this.code.selectors.noResults;
+      const isEmptyPage = noResults && sizzleQuerySelector(doc, noResults.selector);
+      // Без noResults пустую выдачу от сломанной не отличить; одну неразобранную строку часто занимает «ничего не найдено»
+      if (!isEmptyPage && (noResults || rows.length > 1)) {
+        throw new LayoutError(response.url, rows.length ?
+          `Rows are not parsed (${rows.length}): ${stats.firstRowError}` :
+          'Rows and noResults are not found');
+      }
+    } else {
+      if (stats.failedRows) {
+        console.debug(`parseRow: ${stats.failedRows} of ${rows.length} rows are skipped`, stats.firstRowError);
+      }
+      if (results.length >= 3) {
+        const brokenFields = Object.keys(stats.fieldErrors).filter(key => stats.fieldErrors[key] === results.length);
+        if (brokenFields.length) {
+          console.warn(`Fields are not parsed in any row: ${brokenFields.join(', ')}`, response.url);
+        }
       }
     }
 
@@ -101,11 +128,12 @@ class ExKitTracker {
 
     return {
       results,
-      nextPageUrl
+      nextPageUrl,
+      stats,
     };
   }
 
-  parseRow(session, row) {
+  parseRow(session, row, stats) {
     const result = {};
     const errors = [];
     const cache = {};
@@ -147,8 +175,10 @@ class ExKitTracker {
       result.date = -1;
     }
 
-    if (errors.length) {
-      console.warn('parseRow warnings', {row, result, errors});
+    if (stats) {
+      errors.forEach(({key}) => {
+        stats.fieldErrors[key] = (stats.fieldErrors[key] || 0) + 1;
+      });
     }
 
     return result;
@@ -275,6 +305,15 @@ class ExKitTracker {
         };
       });
     });
+  }
+}
+
+// Выдача не разобрана: скорее всего, у сайта изменилась вёрстка
+class LayoutError extends Error {
+  constructor(url, message) {
+    super(`Layout changed: ${message}`);
+    this.code = 'LAYOUT_CHANGED';
+    this.url = url;
   }
 }
 
