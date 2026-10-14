@@ -1,10 +1,11 @@
 # multitracker-search
 
-Форк заархивированного расширения TMS (Torrents MultiSearch, Feverqwe/tSearch): поиск сразу по нескольким торрент-трекерам. Репозиторий: https://github.com/InFuz/multitracker-search. Сборка и устройство трекеров описаны в `README.md`, статус и известные ограничения — в `CHROMEWEBSTORE.md`.
+Форк заархивированного расширения TMS (Torrents MultiSearch, Feverqwe/tSearch): поиск сразу по нескольким торрент-трекерам. Репозиторий: https://github.com/InFuz/multitracker-search. Устройство расширения, сборка, трекеры и решение проблем описаны в `README.md`, статус и разрешения — в `CHROMEWEBSTORE.md`. При изменениях, заметных пользователю, обновляй историю изменений в обоих файлах.
 
 ## Окружение
 
-- Manifest V3: фон — service worker (`src/background`), без `window`/DOM. Пользователь работает в Vivaldi 8.x, расширение подключено как распакованное из `dist/dist`.
+- Manifest V3: фон — service worker (`src/background`), без `window`/DOM; состояние в памяти теряется, когда он засыпает. Поиск и подборки работают на странице `index.html`, код модулей — в sandbox-iframe. Пользователь работает в Vivaldi 8.x, расширение подключено как распакованное из `dist/dist`.
+- Удалённый код и аналитику не добавляй: CSP страниц расширения — только `'self'`.
 - Сборка: Node 18 (`nvm use`), `npm run release` (webpack 4). Скрипт сам пересоздаёт `src/trackers.json` и `src/explorers.json` и собирает `dist/dist`. После сборки расширение перезагружается в `vivaldi://extensions`.
 - `gh` залогинен как InFuz, пушить в форк можно.
 
@@ -13,6 +14,7 @@
 - Трекеры лежат в `src/trackers/*.js`, подборки главной страницы — в `src/explorerModules/*.js`. Сборка копирует их как есть.
 - При изменении трекера или модуля обязательно поднимай `@version` (и `version` в описании кода), иначе у установленного расширения останется закэшированная старая версия.
 - Удалённые трекеры перечислены в `src/tools/removedTrackerIds.js`: они вычищаются из кэша и профилей.
+- Нестандартные ответы сайта (например, 404 на пустую выдачу у MegaPeer) обрабатывай хуком `code.hooks.onRequestError` в самом трекере, а не в общем коде.
 - Актуальные селекторы удобно сверять с определениями Jackett (`src/Jackett.Common/Definitions`).
 
 ## Особенности сети и защиты сайтов
@@ -21,12 +23,15 @@
 - Ответы некоторых трекеров содержат `Link: rel=preload`, браузер применял их к странице расширения; сервис-воркер снимает этот заголовок DNR-правилом (`src/tools/stripPreloadHeaders.js`).
 - Cloudflare хранит `cf_clearance` как разделённую (partitioned) куку, и браузер не отправляет её в запросы расширения. Расширение перед запросом читает её через `chrome.cookies` и добавляет в Cookie сессионным правилом `declarativeNetRequest` на хост (`src/tools/partitionedCookies.js`).
 - Ответы 403/503 показываются в интерфейсе ссылкой «Войти» на сайт трекера (`src/stores/SearchStore.js`).
+- Id сессионных DNR-правил: 1 — снятие `Link: rel=preload`, от 1000 — куки по хостам. Новые служебные правила бери из диапазона до 1000.
 - У Rustorka своя капча на `tracker.php`, привязанная к сессии (`PHPSESSID`); пользователь проходит её в браузере. IMDb иногда отвечает 202 с пустым телом (AWS WAF) — такая секция подборок показывает ссылку на сайт.
 
 ## Тестирование
 
 - Трекеры со входом (Рутрекер, Книжный трекер, Tapochek, Piratbit, Rustorka) и трекеры за Cloudflare проверить можно только в браузере пользователя.
-- Для остального используй отдельный экземпляр Chrome (или Vivaldi) через puppeteer-core: `pipe: true`, `enableExtensions: true`, временный профиль, `browser.installExtension(<путь к dist/dist>)`, DoH в «Local State» профиля. Основной профиль пользователя не трогай.
+- Для остального используй отдельный экземпляр Chrome (или Vivaldi) через puppeteer-core: `pipe: true`, `enableExtensions: true`, временный профиль, `browser.installExtension(<путь к dist/dist>)`, DoH в «Local State» профиля. Основной профиль пользователя не трогай. Chrome stable игнорирует `--load-extension`; chrome-devtools MCP ставит расширения только с флагом `--categoryExtensions` (сейчас не включён).
+- В консоли во время проверок много `Failed to load resource: ERR_QUIC_PROTOCOL_ERROR` / `ERR_SOCKET_NOT_CONNECTED` — это обрывы первого соединения, которые снимаются повтором, а не ошибка кода.
+- Список «Ошибки» в `vivaldi://extensions` собирает `console.error` и `console.warn` и хранит записи старых версий до «Удалить все». Перед разбором ошибок со скриншота попроси пользователя очистить список и повторить действие; ожидаемые состояния (вход, нет следующей страницы) логируй через `logger.info`/`console.debug`, а не как ошибки.
 
 ## Соглашения
 
