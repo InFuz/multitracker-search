@@ -1,14 +1,14 @@
 {
-  "booktracker": "1.1.0",
-  "kinozal": "1.1.0",
-  "limetorrents": "1.0.0",
-  "megapeer": "1.0.1",
-  "nnmclub": "1.1.0",
-  "piratebit": "1.0.2",
-  "rgfootball": "1.1.0",
-  "rustorka": "1.1.1",
-  "rutor": "1.0.4",
-  "rutracker": "1.1.0",
-  "tapochek": "1.1.0",
-  "thepiratebay": "2.0.0"
+  "booktracker": "1.1.1",
+  "kinozal": "1.1.1",
+  "limetorrents": "1.0.1",
+  "megapeer": "1.0.2",
+  "nnmclub": "1.1.1",
+  "piratebit": "1.0.3",
+  "rgfootball": "1.1.1",
+  "rustorka": "1.1.2",
+  "rutor": "1.0.5",
+  "rutracker": "1.1.1",
+  "tapochek": "1.1.1",
+  "thepiratebay": "2.0.1"
 }

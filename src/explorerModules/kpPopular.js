@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name __MSG_name__
-// @downloadURL https://raw.githubusercontent.com/Feverqwe/tSearch/master/src/explorerModules/kpPopular.js
 // @connect *://*.kinopoisk.ru/*
-// @version 1.3
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/explorerModules/kpPopular.js
+// @version 1.4
 // @cacheTTL 86400
 // @locale ru {"name": "Фильмы"}
 // @locale en {"name": "Movies"}

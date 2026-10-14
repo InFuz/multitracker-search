@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name __MSG_name__
 // @connect *://gameguru.ru/*
-// @version 2.0
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/explorerModules/ggGamesNew.js
+// @version 2.1
 // @cacheTTL 86400
 // @locale ru {"name": "Игры: Новые"}
 // @locale en {"name": "Games: New"}

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Перед отправкой в master проверяет трекеры и подборки (builder/checkModules.js):
+# из master их забирает автообновление расширения, поэтому изменённый модуль должен получить новую @version.
+# Подключается командой: git config core.hooksPath .githooks (делает npm install / npm ci).
+
+zero=0000000000000000000000000000000000000000
+
+[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --silent >/dev/null 2>&1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node не найден, проверка модулей пропущена" >&2
+  exit 0
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/master" ] || continue
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then
+    node ./builder/checkModules.js --current "$local_sha" || exit 1
+  else
+    node ./builder/checkModules.js --current "$local_sha" --baseline "$remote_sha" || exit 1
+  fi
+done
+
+exit 0

@@ -3,7 +3,8 @@
 // @description Русский торрент-трекер: фильмы, сериалы, игры, программы, музыка.
 // @icon data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwwAADsMBx2+oZAAAABp0RVh0U29mdHdhcmUAUGFpbnQuTkVUIHYzLjUuMTFH80I3AAABSUlEQVQ4T2P4TyLAruHGwxdQFgbAouHC7efy/k3T1x2H8lEBuoa3n745ZUwzTejVCG7bsP8iVBQJoGi4ev955dTNTplTz954nNK82jNvBlAEKgcDDJuPXF2z98KSHacnrzic3LDCp2jW6r0ggy/feRpVu9SvaE5G++ruxftmrT8BVAnSMGPN0Zj6ZYEl8+Zvwe7orYevxTUsDiydD1QJ5IKcdPXuE9ecmZHVS8EK0EHphE3WKZNW77kA4UL9cOrqfcXAFr2ITggXDnK71wk6Vc7bdBLKR/Z0UMk8Jf9WKAcGMjvWyHo1QDlggNCgF9Fjmzx5w4ELUTULZX2bHTMmr9h1rnzKZm77YqgKMEBokPVtFHaukPNp9i2cOWn5gYT6pSqBraKuNVzW5VAVYIDQkNK6HBKgyODg+Xu5vauhHDBAaCAS0FrD//8AwGeYuQ79m24AAAAASUVORK5CYII=
 // @trackerURL https://rustorka.com/forum/tracker.php
-// @version 1.1.1
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/trackers/rustorka.js
+// @version 1.1.2
 // @connect *://rustorka.com/*
 // @require exKit
 // ==/UserScript==
@@ -11,12 +12,6 @@
 const code = {
   "version": 3,
   "type": "kit",
-  "description": {
-    "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwwAADsMBx2+oZAAAABp0RVh0U29mdHdhcmUAUGFpbnQuTkVUIHYzLjUuMTFH80I3AAABSUlEQVQ4T2P4TyLAruHGwxdQFgbAouHC7efy/k3T1x2H8lEBuoa3n745ZUwzTejVCG7bsP8iVBQJoGi4ev955dTNTplTz954nNK82jNvBlAEKgcDDJuPXF2z98KSHacnrzic3LDCp2jW6r0ggy/feRpVu9SvaE5G++ruxftmrT8BVAnSMGPN0Zj6ZYEl8+Zvwe7orYevxTUsDiydD1QJ5IKcdPXuE9ecmZHVS8EK0EHphE3WKZNW77kA4UL9cOrqfcXAFr2ITggXDnK71wk6Vc7bdBLKR/Z0UMk8Jf9WKAcGMjvWyHo1QDlggNCgF9Fjmzx5w4ELUTULZX2bHTMmr9h1rnzKZm77YqgKMEBokPVtFHaukPNp9i2cOWn5gYT6pSqBraKuNVzW5VAVYIDQkNK6HBKgyODg+Xu5vauhHDBAaCAS0FrD//8AwGeYuQ79m24AAAAASUVORK5CYII=",
-    "name": "Rustorka",
-    "description": "Русский торрент-трекер: фильмы, сериалы, игры, программы, музыка.",
-    "version": "1.1.1"
-  },
   "search": {
     "url": "https://rustorka.com/forum/tracker.php",
     "method": "POST",

@@ -4,6 +4,7 @@ import storageGet from "../tools/storageGet";
 import storageSet from "../tools/storageSet";
 import downloadBlob from "../tools/downloadBlob";
 import mobxCompare from "../tools/mobxCompare";
+import {externalTrackersRepositoryUrl, legacyExternalTrackersRepositoryUrl} from "../tools/builtInModules";
 
 const promiseLimit = require('promise-limit');
 
@@ -85,8 +86,17 @@ const OptionsValueStore = types.model('OptionsValueStore', {
   })), [{by: 'quality'}]),
   trackerListHeight: types.optional(types.number, 200),
   repositories: types.optional(types.array(types.string), [
-    'https://api.github.com/repos/feverqwe/tSearch/contents/external'
+    externalTrackersRepositoryUrl
   ]),
+}).preProcessSnapshot(snapshot => {
+  // каталог «Внешние» оригинального расширения переехал в форк
+  if (snapshot && Array.isArray(snapshot.repositories) && snapshot.repositories.includes(legacyExternalTrackersRepositoryUrl)) {
+    const repositories = snapshot.repositories.map(url => url === legacyExternalTrackersRepositoryUrl ? externalTrackersRepositoryUrl : url);
+    return Object.assign({}, snapshot, {
+      repositories: repositories.filter((url, index) => repositories.indexOf(url) === index),
+    });
+  }
+  return snapshot;
 }).actions(self => {
   return {
     setValue(key, value) {

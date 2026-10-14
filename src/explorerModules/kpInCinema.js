@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name __MSG_name__
 // @connect *://*.kinopoisk.ru/*
-// @version 2.0
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/explorerModules/kpInCinema.js
+// @version 2.1
 // @cacheTTL 86400
 // @locale ru {"name": "Кинопоиск: в кино"}
 // @locale en {"name": "Kinopoisk: in cinema"}

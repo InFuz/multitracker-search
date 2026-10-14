@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name __MSG_name__
 // @connect *://*.kinopoisk.ru/*
-// @version 2.0
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/explorerModules/kpSeries.js
+// @version 2.1
 // @cacheTTL 86400
 // @locale ru {"name": "Сериалы"}
 // @locale en {"name": "Series"}

@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name __MSG_name__
 // @connect *://*.imdb.com/*
-// @version 2.0
+// @downloadURL https://raw.githubusercontent.com/InFuz/multitracker-search/master/src/explorerModules/imdbPopular.js
+// @version 2.1
 // @cacheTTL 86400
 // @locale ru {"name": "IMDB: Фильмы"}
 // @locale en {"name": "IMDB: Movies"}

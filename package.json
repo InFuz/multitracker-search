@@ -1,14 +1,16 @@
 {
   "name": "multitracker-search",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "scripts": {
     "buildExplorersJson": "node ./builder/buildExplorersJson.js",
     "buildTrackersJson": "node ./builder/buildTrackersJson.js",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "checkModules": "node ./builder/checkModules.js",
     "compress": "node ./builder/compressDist",
     "watch": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode development --watch --config webpack.config.js",
     "build": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode development --config webpack.config.js",
     "buildRelease": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode production --config webpack.config.js",
-    "release": "npm run buildExplorersJson && npm run buildTrackersJson && npm run buildRelease && npm run compress"
+    "release": "npm run checkModules && npm run buildExplorersJson && npm run buildTrackersJson && npm run buildRelease && npm run compress"
   },
   "dependencies": {
     "abortcontroller-polyfill": "^1.3.0",
