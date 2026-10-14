@@ -192,12 +192,14 @@ class ExplorerSectionHeader extends React.Component {
         });
       }
 
-      /*if (sectionStore.authRequired) {
+      // Ссылка на сайт, если модулю нужен вход или прохождение защиты от ботов
+      if (sectionStore.authRequired && sectionStore.authRequired.url) {
+        moduleActions = moduleActions || [];
         moduleActions.unshift(
-          <a key={'authRequired'} className="action  action__open" target="_blank" href={sectionStore.authRequired.url}
+          <a key={'authRequired'} className="action action__login" target="_blank" href={sectionStore.authRequired.url}
              title={chrome.i18n.getMessage('login')}/>
         );
-      }*/
+      }
 
       let editBtn = null;
       if (this.sectionStore.id !== 'favorites') {

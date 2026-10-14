@@ -1,18 +1,13 @@
 {
-  "booktracker": "1.0.2",
-  "brodim": "1.0.2",
-  "extratorrent": "1.0.3",
-  "filebase": "1.0.2",
-  "inmac": "1.0.2",
-  "kinozal": "1.0.3",
-  "megashara": "1.0.2",
+  "booktracker": "1.1.0",
+  "kinozal": "1.1.0",
+  "limetorrents": "1.0.0",
+  "megapeer": "1.0.0",
   "nnmclub": "1.1.0",
-  "opentorrent": "1.0.2",
   "piratebit": "1.0.2",
-  "rgfootball": "1.0.2",
+  "rgfootball": "1.1.0",
   "rutor": "1.0.4",
-  "rutracker": "1.0.6",
-  "tapochek": "1.0.4",
-  "tfile": "1.0.2",
-  "thepiratebay": "1.0.2"
+  "rutracker": "1.1.0",
+  "tapochek": "1.1.0",
+  "thepiratebay": "2.0.0"
 }

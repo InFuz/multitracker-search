@@ -5,6 +5,7 @@ import storageGet from "../tools/storageGet";
 import storageSet from "../tools/storageSet";
 import reOrderStoreItems from "../tools/reOrderStoreItems";
 import mobxCompare from "../tools/mobxCompare";
+import removedTrackerIds from "../tools/removedTrackerIds";
 
 const logger = getLogger('ProfilesStore');
 
@@ -39,6 +40,11 @@ const ProfilesStore = types.model('ProfilesStore', {
 }).actions(/**ProfilesStore*/self => {
   return {
     setProfiles(profiles) {
+      profiles.forEach(profile => {
+        if (profile && Array.isArray(profile.trackers)) {
+          profile.trackers = profile.trackers.filter(tracker => removedTrackerIds.indexOf(tracker && tracker.id) === -1);
+        }
+      });
       if (!profiles.length) {
         profiles.push(getDefaultProfile());
       }
@@ -166,9 +172,9 @@ const getDefaultProfile = () => {
     }, {
       id: 'rutor'
     }, {
-      id: 'tfile'
+      id: 'megapeer'
     }, {
-      id: 'opentorrent'
+      id: 'thepiratebay'
     }]
   };
 };

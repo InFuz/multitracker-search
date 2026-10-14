@@ -1,123 +1,81 @@
 // ==UserScript==
 // @name __MSG_name__
-// @downloadURL https://raw.githubusercontent.com/Feverqwe/tSearch/master/src/explorerModules/imdbPopular.js
 // @connect *://*.imdb.com/*
-// @version 1.2
+// @version 2.0
 // @cacheTTL 86400
 // @locale ru {"name": "IMDB: Фильмы"}
 // @locale en {"name": "IMDB: Movies"}
 // @defaultLocale en
 // ==/UserScript==
 
-const imdbGetImgFilename = url => {
-  return url.replace(/(\/images\/.+)_V1.*$/, '$1_V1_SX120_.jpg');
-};
-
-const spaceReplace = text => {
-  return text.replace(/[\s\xA0]/g, ' ');
-};
-
-const rmRef = url => {
-  return url.replace(/\?ref.*$/, '');
-};
-
-const validateItem = item => {
-  Object.keys(item).forEach(key => {
-    if (!item[key]) {
-      throw new Error(`Item ${key} is empty!`);
-    }
-  });
-};
-
-const text = node => {
-  return node && node.textContent || '';
-};
-
 const normText = node => {
-  return spaceReplace(text(node)).trim();
+  return (node && node.textContent || '').replace(/[\s\xA0]+/g, ' ').trim();
 };
 
-const normYear = text => {
-  const m = /\((\d{4})\)$/.exec(text);
-  if (m) {
-    return m[1];
-  }
+const uniqByUrl = items => {
+  const seen = {};
+  return items.filter(item => {
+    if (!item.title || !item.url || seen[item.url]) return false;
+    seen[item.url] = true;
+    return true;
+  });
 };
 
-const prop = (node, prop) => {
-  return node && node[prop];
+const loadPages = (urls, onPageLoad) => {
+  const items = [];
+  let promise = Promise.resolve();
+  urls.forEach(url => {
+    promise = promise.then(() => {
+      return API_request({method: 'GET', url: url}).then(response => {
+        items.push(...onPageLoad(response));
+      }, err => {
+        console.error('Page load error', url, err);
+      });
+    });
+  });
+  return promise.then(() => uniqByUrl(items));
 };
 
-const parseItem = item => {
-  const imgNode = item.querySelector('.lister-item-image img[loadlate]');
-  if (imgNode) {
-    imgNode.src = imgNode.getAttribute('loadlate');
-  }
-  const poster = imdbGetImgFilename(prop(imgNode, 'src') || '');
-
-  const linkNode = item.querySelector('.lister-item-header > a');
-  const url = rmRef(prop(linkNode, 'href'));
-  let title = normText(linkNode);
-
-  const year = normYear(normText(item.querySelector('.lister-item-header > a + span')));
-
-  if (year) {
-    if (title) {
-      title += ' ' + year;
-    }
-  }
-
-  const result = {
-    title: title,
-    url: url
-  };
-
-  if (poster) {
-    result.poster = poster;
-  }
-
-  return result;
-};
-
-const onPageLoad = response => {
-  const content = response.body;
-  const doc = API_getDoc(content, response.url);
-
-  const ddBl = {};
-  const results = [];
-  Array.from(doc.querySelectorAll('.lister-list > .lister-item')).forEach(item => {
-    try {
-      const result = parseItem(item);
-
-      if (ddBl[result.url]) {
-        throw new Error('Url already exists');
+const registerGetItems = getItems => {
+  API_event('getItems', () => {
+    return getItems().then(items => {
+      if (!items.length) {
+        throw new Error('Items is empty');
       }
-      ddBl[result.url] = true;
+      return {success: true, items};
+    });
+  });
+};
 
-      validateItem(result);
-
-      results.push(result);
-    } catch (err) {
-      console.error('Parse item error', err);
+// Новый IMDb (Next.js): данные списка лежат в <script id="__NEXT_DATA__">
+const parseImdbSearch = response => {
+  const m = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/.exec(response.body);
+  if (!m) {
+    if (response.statusCode === 202 || !response.body) {
+      // Защита от ботов (AWS WAF): после открытия imdb.com в браузере запросы проходят
+      const err = new Error('IMDb bot protection');
+      err.code = 'AUTH_REQUIRED';
+      err.url = 'https://www.imdb.com/';
+      throw err;
     }
-  });
-  return results;
-};
-
-const getItems = () => {
-  return API_request({
-    method: 'GET',
-    url: `https://www.imdb.com/search/title?count=100&title_type=feature`,
-  }).then(response => {
-    return onPageLoad(response);
-  });
-};
-
-API_event('getItems', () => {
-  return getItems().then(items => {
-    return {
-      success: true,
-      items
+    throw new Error('__NEXT_DATA__ is not found');
+  }
+  const data = JSON.parse(m[1]);
+  const list = data.props.pageProps.searchResults.titleResults.titleListItems || [];
+  return list.map(item => {
+    const year = item.releaseYear ? ' ' + item.releaseYear : '';
+    const result = {
+      title: (item.titleText || item.originalTitleText) + year,
+      url: 'https://www.imdb.com/title/' + item.titleId + '/'
     };
+    if (item.originalTitleText && item.originalTitleText !== item.titleText) {
+      result.titleOriginal = item.originalTitleText + year;
+    }
+    if (item.primaryImage && item.primaryImage.url) {
+      result.poster = item.primaryImage.url.replace(/\._V1_.*$/, '._V1_SX300_.jpg');
+    }
+    return result;
   });
-});
+};
+
+registerGetItems(() => loadPages(['https://www.imdb.com/search/title/?title_type=feature'], parseImdbSearch));

@@ -56,7 +56,9 @@ class ExplorerCache {
   get(key, ttl) {
     return this.getStorage().then(storage => {
       const item = storage.explorerCache[key];
-      if (item && (!ttl || item.createdAt > getNow() - ttl)) {
+      // пустой список не кэшируем: модуль мог временно не отдать данные
+      const isEmpty = item && Array.isArray(item.value) && !item.value.length;
+      if (item && !isEmpty && (!ttl || item.createdAt > getNow() - ttl)) {
         return item.value;
       }
     });

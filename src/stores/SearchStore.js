@@ -76,6 +76,14 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
             };
           }
         } else {
+          // 403/503 обычно означают проверку Cloudflare/DDoS-Guard: даём ссылку на сайт,
+          // после её прохождения в браузере запросы расширения тоже проходят
+          const trackerURL = self.tracker && self.tracker.meta && self.tracker.meta.trackerURL;
+          if (trackerURL && isBlockedByProtection(err) && isAlive(self)) {
+            self.authRequired = {
+              url: trackerURL
+            };
+          }
           logger.error(`[${id}] searchWrapper error`, err);
         }
       }
@@ -292,6 +300,10 @@ const SearchStore = types.model('SearchStore', {
     }
   };
 });
+
+const isBlockedByProtection = (err) => {
+  return [403, 503].indexOf(err.statusCode) !== -1 || /^(403|503) - /.test(err.message || '');
+};
 
 const prepSearchResults = (trackerId, queryHighlightMap, queryRateScheme, results, defineCategory, urlSet) => {
   return results.filter(result => {

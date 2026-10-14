@@ -136,15 +136,29 @@ const tabFetchRequest = (origin, url, fetchOptions) => {
   return request;
 };
 
+// На некоторых сетях первое соединение с хостом обрывается, а повтор проходит
+const NETWORK_RETRY_COUNT = 3;
+const NETWORK_RETRY_DELAY = 700;
+
 const fetchRequest = (url, fetchOptions) => {
   const controller = new AbortController();
 
-  const request = fetch(url, {
-    method: fetchOptions.method,
-    headers: fetchOptions.headers,
-    body: fetchOptions.body,
-    signal: controller.signal
-  }).then(response => {
+  const fetchWithRetry = (retryCount) => {
+    return fetch(url, {
+      method: fetchOptions.method,
+      headers: fetchOptions.headers,
+      body: fetchOptions.body,
+      signal: controller.signal
+    }).catch((err) => {
+      // whatwg-fetch отдаёт TypeError на сетевую ошибку, отмена — AbortError
+      if (retryCount > 0 && !controller.signal.aborted && err instanceof TypeError) {
+        return new Promise(resolve => setTimeout(resolve, NETWORK_RETRY_DELAY)).then(() => fetchWithRetry(retryCount - 1));
+      }
+      throw err;
+    });
+  };
+
+  const request = fetchWithRetry(NETWORK_RETRY_COUNT).then(response => {
     if (!response.ok) {
       throw new StatusCodeError(response.status, null, null, response);
     }

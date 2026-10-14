@@ -1,113 +1,76 @@
 // ==UserScript==
 // @name __MSG_name__
-// @downloadURL https://raw.githubusercontent.com/Feverqwe/tSearch/master/src/explorerModules/kpInCinema.js
 // @connect *://*.kinopoisk.ru/*
-// @version 1.3
+// @version 2.0
 // @cacheTTL 86400
 // @locale ru {"name": "Кинопоиск: в кино"}
 // @locale en {"name": "Kinopoisk: in cinema"}
 // @defaultLocale en
 // ==/UserScript==
 
-const kpGetImgFileName = url => {
-  return url.replace(/sm_film/, 'film');
+const normText = node => {
+  return (node && node.textContent || '').replace(/[\s\xA0]+/g, ' ').trim();
 };
 
-const spaceReplace = text => {
-  return text.replace(/[\s\xA0]/g, ' ');
-};
-
-const parseInfo = text => {
-  const m = /^(?:(.*)\s+|)\((\d{4})[^)]*\)(?:\s+\d+\s+.{3}\.)?$/.exec(text);
-  if (m) {
-    return {
-      title: m[1],
-      year: parseInt(m[2], 10)
-    };
-  }
-};
-
-const validateItem = item => {
-  Object.keys(item).forEach(key => {
-    if (!item[key]) {
-      throw new Error(`Item ${key} is empty!`);
-    }
+const uniqByUrl = items => {
+  const seen = {};
+  return items.filter(item => {
+    if (!item.title || !item.url || seen[item.url]) return false;
+    seen[item.url] = true;
+    return true;
   });
 };
 
-const text = node => {
-  return node && node.textContent || '';
+const loadPages = (urls, onPageLoad) => {
+  const items = [];
+  let promise = Promise.resolve();
+  urls.forEach(url => {
+    promise = promise.then(() => {
+      return API_request({method: 'GET', url: url}).then(response => {
+        items.push(...onPageLoad(response));
+      }, err => {
+        console.error('Page load error', url, err);
+      });
+    });
+  });
+  return promise.then(() => uniqByUrl(items));
 };
 
-const normText = node => {
-  return spaceReplace(text(node)).trim();
-};
-
-const prop = (node, prop) => {
-  return node && node[prop];
-};
-
-const parseItem = item => {
-  const linkNode = item.querySelector('.info .name a');
-  let title = normText(linkNode);
-  const url = prop(linkNode, 'href');
-
-  let poster = kpGetImgFileName(prop(item.querySelector('.poster img[src]'), 'src') || '');
-  const m = /\/film\/(\d+)/.exec(url);
-  if (m) {
-    poster = `https://www.kinopoisk.ru/images/film/${m[1]}.jpg`;
-  }
-
-  let year = null;
-  let titleOriginal = null;
-  const info = parseInfo(normText(item.querySelector('.info .name span')));
-  if (info) {
-    titleOriginal = info.title;
-    year = info.year;
-  }
-
-  if (year) {
-    if (title) {
-      title += ' ' + year;
-    }
-    if (titleOriginal) {
-      titleOriginal += ' ' + year;
-    }
-  }
-
-  const result = {
-    title: title,
-    url: url
-  };
-
-  if (titleOriginal) {
-    result.titleOriginal = titleOriginal;
-  }
-
-  if (poster) {
-    result.poster = poster;
-  }
-
-  return result;
-};
-
-const onPageLoad = response => {
-  const content = response.body;
-  const doc = API_getDoc(content, response.url);
-
-  const ddBl = {};
-  const results = [];
-  Array.from(doc.querySelectorAll('div.filmsListNew > div.item')).forEach(item => {
-    try {
-      const result = parseItem(item);
-
-      if (ddBl[result.url]) {
-        throw new Error('Url already exists');
+const registerGetItems = getItems => {
+  API_event('getItems', () => {
+    return getItems().then(items => {
+      if (!items.length) {
+        throw new Error('Items is empty');
       }
-      ddBl[result.url] = true;
+      return {success: true, items};
+    });
+  });
+};
 
-      validateItem(result);
-
+// Списки Кинопоиска /lists/movies/...: [data-test-id="movie-list-item"]
+const parseKpList = response => {
+  const doc = API_getDoc(response.body, response.url);
+  const results = [];
+  Array.from(doc.querySelectorAll('[data-test-id="movie-list-item"]')).forEach(item => {
+    try {
+      const linkNode = item.querySelector('a[data-test-id="next-link"]') || item.querySelector('a[href^="/film/"], a[href^="/series/"]');
+      // alt постера — чистое название, без бейджей вроде "Промо"
+      const img = item.querySelector('img[src*="kinopoisk-image"]');
+      let title = img && img.getAttribute('alt') || normText(item.querySelector('span[class*="mainTitle"]'));
+      // "Original title, 2021, 2 ч 10 мин" | "2026" | "2026–..."
+      const secondary = normText(item.querySelector('[class*="secondaryText"]'));
+      const m = /^(?:(.*?),\s*)?(\d{4})/.exec(secondary);
+      let titleOriginal = m && m[1] || '';
+      const year = m && m[2];
+      if (year) {
+        title += ' ' + year;
+        if (titleOriginal) titleOriginal += ' ' + year;
+      }
+      const result = {title: title, url: linkNode && linkNode.href};
+      if (titleOriginal) result.titleOriginal = titleOriginal;
+      if (img) {
+        result.poster = 'https:' + img.getAttribute('src').replace(/^https?:/, '').replace(/\/\d+x\d+$/, '/300x450');
+      }
       results.push(result);
     } catch (err) {
       console.error('Parse item error', err);
@@ -116,31 +79,4 @@ const onPageLoad = response => {
   return results;
 };
 
-const getItems = () => {
-  const items = [];
-  let promise = Promise.resolve();
-  ['0', '1', '2'].forEach(page => {
-    promise = promise.then(() => {
-      return API_request({
-        method: 'GET',
-        url: `https://www.kinopoisk.ru/afisha/new/page/${page}/`,
-      }).then(response => {
-        return onPageLoad(response);
-      }).then(_items => {
-        items.push(..._items);
-      }, err => {
-        console.error('Page load error', err);
-      });
-    });
-  });
-  return promise.then(() => items);
-};
-
-API_event('getItems', () => {
-  return getItems().then(items => {
-    return {
-      success: true,
-      items
-    };
-  });
-});
+registerGetItems(() => loadPages([1, 2].map(page => 'https://www.kinopoisk.ru/lists/movies/movies-in-cinema/?page=' + page), parseKpList));

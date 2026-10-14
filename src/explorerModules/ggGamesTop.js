@@ -1,105 +1,101 @@
 // ==UserScript==
 // @name __MSG_name__
-// @downloadURL https://raw.githubusercontent.com/Feverqwe/tSearch/master/src/explorerModules/ggGamesTop.js
-// @connect *://*.gameguru.ru/*
-// @version 1.2
+// @connect *://gameguru.ru/*
+// @version 2.0
 // @cacheTTL 86400
 // @locale ru {"name": "Игры: Лучшие"}
 // @locale en {"name": "Games: Best"}
 // @defaultLocale en
 // ==/UserScript==
 
-const spaceReplace = text => {
-  return text.replace(/[\s\xA0]/g, ' ');
+const normText = node => {
+  return (node && node.textContent || '').replace(/[\s\xA0]+/g, ' ').trim();
 };
 
-const validateItem = item => {
-  Object.keys(item).forEach(key => {
-    if (!item[key]) {
-      throw new Error(`Item ${key} is empty!`);
-    }
+const uniqByUrl = items => {
+  const seen = {};
+  return items.filter(item => {
+    if (!item.title || !item.url || seen[item.url]) return false;
+    seen[item.url] = true;
+    return true;
   });
 };
 
-const text = node => {
-  return node && node.textContent || '';
+const loadPages = (urls, onPageLoad) => {
+  const items = [];
+  let promise = Promise.resolve();
+  urls.forEach(url => {
+    promise = promise.then(() => {
+      return API_request({method: 'GET', url: url}).then(response => {
+        items.push(...onPageLoad(response));
+      }, err => {
+        console.error('Page load error', url, err);
+      });
+    });
+  });
+  return promise.then(() => uniqByUrl(items));
 };
 
-const normText = node => {
-  return spaceReplace(text(node)).trim();
-};
-
-const prop = (node, prop) => {
-  return node && node[prop];
-};
-
-const parseItem = item => {
-  const poster = prop(item.querySelector('.V7-img img[src]'), 'src');
-
-  const linkNode = item.querySelector('.V7-title a');
-  const url = prop(linkNode, 'href');
-  const title = normText(linkNode);
-
-  const result = {
-    title: title,
-    url: url
-  };
-
-  if (poster) {
-    result.poster = poster;
-  }
-
-  return result;
-};
-
-const onPageLoad = response => {
-  const content = response.body;
-  const doc = API_getDoc(content, response.url);
-
-  const ddBl = {};
-  const results = [];
-  Array.from(doc.querySelectorAll('.V7-blocks > .V7-block')).forEach(item => {
-    try {
-      const result = parseItem(item);
-
-      if (ddBl[result.url]) {
-        throw new Error('Url already exists');
+const registerGetItems = getItems => {
+  API_event('getItems', () => {
+    return getItems().then(items => {
+      if (!items.length) {
+        throw new Error('Items is empty');
       }
-      ddBl[result.url] = true;
+      return {success: true, items};
+    });
+  });
+};
 
-      validateItem(result);
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
-      results.push(result);
-    } catch (err) {
-      console.error('Parse item error', err);
+// "9 сентября 2026" -> Date, "В 2030 году" -> null
+const parseReleaseDate = text => {
+  const m = /(\d{1,2})\s+([а-я]+)\s+(\d{4})/i.exec(text);
+  if (!m) return null;
+  const month = MONTHS.indexOf(m[2].toLowerCase());
+  if (month === -1) return null;
+  return new Date(parseInt(m[3], 10), month, parseInt(m[1], 10));
+};
+
+// Каталог gameguru.ru/games/platform_pc/: карточки div.short-news
+const parseGgList = response => {
+  const doc = API_getDoc(response.body, response.url);
+  const results = [];
+  Array.from(doc.querySelectorAll('.short-news')).forEach(item => {
+    const linkNode = item.querySelector('.short-news-title a[href*="/game/"]');
+    if (!linkNode) return;
+    const result = {title: normText(linkNode), url: linkNode.href};
+    const img = item.querySelector('.short-news-image img[src]');
+    if (img) {
+      result.poster = img.src;
     }
+    Array.from(item.querySelectorAll('.short-news-play-info')).forEach(info => {
+      if (/Дата выхода/.test(normText(info.querySelector('.gray')))) {
+        result.releaseDate = parseReleaseDate(normText(info));
+      }
+    });
+    results.push(result);
   });
   return results;
 };
 
-const getItems = () => {
-  const items = [];
-  let promise = Promise.resolve();
-  [1, 2, 3, 4, 5].forEach(page => {
-    promise = promise.then(() => {
-      return API_request({
-        method: 'GET',
-        url: `https://gameguru.ru/pc/games/rated/page${page}/list.html`,
-      }).then(response => {
-        return onPageLoad(response);
-      }).then(_items => {
-        items.push(..._items);
-      });
-    });
-  });
-  return promise.then(() => items);
+const stripDate = item => {
+  const result = {title: item.title, url: item.url};
+  if (item.poster) result.poster = item.poster;
+  return result;
 };
 
-API_event('getItems', () => {
-  return getItems().then(items => {
-    return {
-      success: true,
-      items
-    };
-  });
-});
+const ggPages = (count) => {
+  const urls = [];
+  for (let page = 1; page <= count; page++) {
+    urls.push('https://gameguru.ru/games/platform_pc/' + (page > 1 ? '?page=' + page : ''));
+  }
+  return urls;
+};
+
+// Популярные игры PC, которые уже вышли
+registerGetItems(() => loadPages(ggPages(3), parseGgList).then(items => {
+  const now = Date.now();
+  return items.filter(item => item.releaseDate && item.releaseDate.getTime() <= now).map(stripDate);
+}));

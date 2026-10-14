@@ -5,6 +5,7 @@ import TrackerStore from "../stores/TrackerStore";
 import {destroy} from "mobx-state-tree";
 import storageGet from "./storageGet";
 import storageSet from "./storageSet";
+import removedTrackerIds from "./removedTrackerIds";
 
 const compareVersions = require('compare-versions');
 
@@ -16,6 +17,14 @@ const getTrackers = () => {
     storageGet({trackers: {}}).then(storage => storage.trackers)
   ]).then(([idLocalVersion, idTracker]) => {
     let storageChanged = false;
+    // удалённые встроенные трекеры убираем из кэша; свои трекеры с тем же id не трогаем
+    removedTrackerIds.forEach(id => {
+      const tracker = idTracker[id];
+      if (tracker && /feverqwe\/tsearch/i.test(tracker.meta && tracker.meta.downloadURL || '')) {
+        delete idTracker[id];
+        storageChanged = true;
+      }
+    });
     const ids = Object.keys(idLocalVersion).concat(Object.keys(idTracker));
     const idsUnic = ids.filter((id, index) => ids.indexOf(id) === index);
     return Promise.all(idsUnic.map(id => {
