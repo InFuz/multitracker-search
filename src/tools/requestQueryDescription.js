@@ -46,12 +46,22 @@ const findSrcByImgId = (body, id) => {
   throw new Error('Src is not found');
 };
 
+// Страница расширения разбирает выдачу Google через DOMParser, и Chrome сверяет атрибуты
+// onclick/onload/... разбираемого HTML с CSP страницы: каждый такой атрибут попадает
+// в «Ошибки» как «Executing inline event handler violates ...», хотя ничего не выполняется.
+// Описанию запроса обработчики не нужны, поэтому убираем их из тегов до разбора
+const TAG_RE = /<[a-z][^\s>\/]*(?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*\s*\/?>/gi;
+const EVENT_ATTR_RE = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+const stripEventHandlers = (html) => {
+  return html.replace(TAG_RE, tag => tag.replace(EVENT_ATTR_RE, ''));
+};
+
 const requestQueryDescription = (query) => {
   return retryOnNetworkError(() => fetch('https://www.google.com/search?' + qs.stringify({
     q: query
   }))).then((response) => {
     return response.text().then((body) => {
-      const doc = exKitGetDoc(body, response.url);
+      const doc = exKitGetDoc(stripEventHandlers(body), response.url);
 
       const content = doc.querySelector('#rhs_block');
       if (!content) {
