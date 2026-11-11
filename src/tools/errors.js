@@ -7,6 +7,11 @@ class StatusCodeError extends Error {
     this.statusCode = statusCode;
     this.options = options;
     this.response = response;
+    // Cloudflare отвечает на запрос проверкой (403/503 с заголовком cf-mitigated: challenge):
+    // это не выход из аккаунта, а истёкшая проверка браузера (кука cf_clearance)
+    const headers = response && response.headers;
+    this.cloudflareChallenge = Boolean(headers && typeof headers.get === 'function' &&
+      headers.get('cf-mitigated') === 'challenge');
   }
 }
 

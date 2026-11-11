@@ -17,11 +17,12 @@ const logger = getLogger('SearchStore');
  * @property {string} id
  * @property {string} [state]
  * @property {*} nextQuery
- * @property {{url:string|undefined|null}|undefined} authRequired
+ * @property {{url:string|undefined|null,cloudflare:boolean}|undefined} authRequired
  * @property {{url:string|undefined|null}|undefined} layoutChanged
  * @property {function:Promise} searchWrapper
  * @property {function} search
  * @property {function} searchNext
+ * @property {function:Promise} retry
  * @property {*} tracker
  * @property {*} query
  * @property {*} queryHighlightMap
@@ -31,8 +32,10 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
   id: types.string,
   state: types.optional(types.enumeration(['idle', 'pending', 'done', 'error']), 'idle'),
   nextQuery: types.frozen(),
+  // нужен вход или проверка на сайте; cloudflare — сайт ответил проверкой Cloudflare, а не просьбой войти
   authRequired: types.maybe(types.model({
-    url: types.maybeNull(types.string)
+    url: types.maybeNull(types.string),
+    cloudflare: types.optional(types.boolean, false),
   })),
   // выдача не разобрана: похоже, у сайта изменилась вёрстка; url — страница, которую вернул сайт
   layoutChanged: types.maybe(types.model({
@@ -40,12 +43,17 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
   })),
 }).actions((self) => {
   let urlSet = null;
+  // последний запрос, чтобы повторить его после входа или проверки на сайте
+  let lastSearchFn = null;
   return {
     searchWrapper: flow(function* (searchFn) {
       const {id, queryHighlightMap, queryRateScheme} = self;
       const /**RootStore*/rootStore = getParentOfType(self, RootStore);
       const defineCategory = rootStore.options.options.defineCategory;
+      lastSearchFn = searchFn;
       self.state = 'pending';
+      self.authRequired = undefined;
+      self.layoutChanged = undefined;
       try {
         const tracker = self.tracker;
         if (!tracker) {
@@ -96,9 +104,14 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
           const trackerURL = tracker && tracker.meta && tracker.meta.trackerURL;
           if (trackerURL && isBlockedByProtection(err)) {
             self.authRequired = {
-              url: trackerURL
+              url: trackerURL,
+              cloudflare: Boolean(err.cloudflareChallenge),
             };
-            logger.info(`[${id}] searchWrapper: требуется вход или проверка на сайте`, err.message);
+            if (err.cloudflareChallenge) {
+              logger.info(`[${id}] searchWrapper: сайт просит пройти проверку Cloudflare`, err.message);
+            } else {
+              logger.info(`[${id}] searchWrapper: требуется вход или проверка на сайте`, err.message);
+            }
           } else {
             logger.error(`[${id}] searchWrapper error`, err);
           }
@@ -117,6 +130,10 @@ const TrackerSearchStore = types.model('TrackerSearchStore', {
       return self.searchWrapper(() => {
         return self.tracker.worker.searchNext(nextQuery);
       });
+    },
+    retry() {
+      if (!lastSearchFn) return Promise.resolve();
+      return self.searchWrapper(lastSearchFn);
     },
     setUrlSet(value) {
       urlSet = value;
@@ -240,6 +257,20 @@ const SearchStore = types.model('SearchStore', {
     searchNext() {
       return self.searchWrapper((trackerSearch) => {
         return trackerSearch.searchNext();
+      });
+    },
+    // Повтор запроса трекера, которому был нужен вход или проверка на сайте:
+    // результаты дописываются на страницу, для которой запрос не прошёл (последнюю)
+    retryTrackerSearch(trackerId) {
+      const trackerSearch = self.trackerSearch.get(trackerId);
+      const page = self.pages[self.pages.length - 1];
+      if (!trackerSearch || !trackerSearch.authRequired || trackerSearch.state === 'pending' || !page) {
+        return Promise.resolve();
+      }
+      return trackerSearch.retry().then((results) => {
+        if (results && isAlive(self) && isAlive(page)) {
+          page.appendResults(trackerId, results);
+        }
       });
     },
     requestQueryDescription() {

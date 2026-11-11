@@ -263,6 +263,9 @@
     "login": {
         "message": "Login"
     },
+    "cloudflareCheck": {
+        "message": "The site asks to pass a Cloudflare check (not to log in again). Open the site, then come back: the tracker search will be repeated automatically"
+    },
     "layoutChanged": {
         "message": "Could not parse the results: the tracker site seems to have changed. Open the page returned by the site"
     },

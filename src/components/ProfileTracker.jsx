@@ -3,6 +3,7 @@ import React from "react";
 import getTrackerIconClassName from "../tools/getTrackerIconClassName";
 import blankSvg from "../assets/img/blank.svg";
 import PropTypes from "prop-types";
+import {isAlive} from "mobx-state-tree";
 
 @observer
 class ProfileTracker extends React.Component {
@@ -86,7 +87,43 @@ class Tracker extends React.Component {
 
   componentWillUnmount() {
     this.trackerStore.deattach();
+    this.stopWaitingForReturn();
   }
+
+  // Пользователь открыл сайт трекера, чтобы войти или пройти проверку Cloudflare.
+  // Когда он вернётся на страницу расширения, повторяем запрос трекера — результаты появятся сами
+  handleLoginClick = () => {
+    const searchStore = this.searchStore;
+    const trackerId = this.trackerStore.id;
+    if (!searchStore) return;
+
+    this.stopWaitingForReturn();
+    let left = document.hidden || !document.hasFocus();
+    const onLeave = () => {
+      left = true;
+    };
+    const onReturn = () => {
+      if (!left || document.hidden) return;
+      this.stopWaitingForReturn();
+      if (isAlive(searchStore) && this.searchStore === searchStore) {
+        searchStore.retryTrackerSearch(trackerId);
+      }
+    };
+    const onVisibilityChange = () => {
+      document.hidden ? onLeave() : onReturn();
+    };
+    window.addEventListener('blur', onLeave);
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    this.stopWaitingForReturn = () => {
+      window.removeEventListener('blur', onLeave);
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      this.stopWaitingForReturn = () => {};
+    };
+  };
+
+  stopWaitingForReturn = () => {};
 
   handleClick = (e) => {
     e.preventDefault();
@@ -130,9 +167,11 @@ class Tracker extends React.Component {
     let searchState = null;
     if (trackerSearchStore) {
       if (trackerSearchStore.authRequired) {
+        const {url, cloudflare} = trackerSearchStore.authRequired;
         searchState = (
-          <a className="tracker__login" target="_blank" href={trackerSearchStore.authRequired.url}
-             title={chrome.i18n.getMessage('login')}/>
+          <a className={cloudflare ? 'tracker__cloudflare' : 'tracker__login'} target="_blank" href={url}
+             onClick={this.handleLoginClick}
+             title={chrome.i18n.getMessage(cloudflare ? 'cloudflareCheck' : 'login')}/>
         );
       } else
       if (trackerSearchStore.layoutChanged) {
